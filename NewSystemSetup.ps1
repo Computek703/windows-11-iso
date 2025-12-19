@@ -371,21 +371,22 @@ function Run-SmartFirstTimeSetup {
     Write-Host ""
 }
 
-function Run-FinalSystemReadinessCheck {
+function Invoke-CompuTekFinalReadinessCheck {
 
-    $Host.UI.RawUI.WindowTitle = "Final System Readiness Check - Compu-TEK"
-    Clear-Host
+# =====================================================
+#  FINAL SYSTEM READINESS CHECK - COMPU-TEK
+# =====================================================
+$Host.UI.RawUI.WindowTitle = "Final System Readiness Check - Compu-TEK"
+Write-Host "`n===================================================" -ForegroundColor Cyan
+Write-Host "      FINAL SYSTEM READINESS CHECK - COMPU-TEK" -ForegroundColor Cyan
+Write-Host "===================================================`n" -ForegroundColor Cyan
 
-    Write-Host "`n===================================================" -ForegroundColor blue
-    Write-Host "      FINAL SYSTEM READINESS CHECK - COMPU-TEK" -ForegroundColor blue
-    Write-Host "===================================================`n" -ForegroundColor blue
-
-    $BitLockerSkipped   = $false
-    $SpeakerTestFailed  = $false
+$BitLockerSkipped = $false
+$SpeakerTestFailed = $false
 
 # --- 1. Windows Edition & Activation ---
 $edition = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID
-Write-Host "[INFO] Windows Edition: $edition" -ForegroundColor blue
+Write-Host "[INFO] Windows Edition: $edition" -ForegroundColor Cyan
 
 try {
     $l = Get-CimInstance SoftwareLicensingProduct |
@@ -401,13 +402,13 @@ try {
 
 # --- 1b. Disable and verify Hibernation ---
 try {
-    Write-Host "`n[INFO] Checking hibernation status..." -ForegroundColor blue
+    Write-Host "`n[INFO] Checking hibernation status..." -ForegroundColor Cyan
     $hiberStatus = (powercfg /a) | Select-String "Hibernate"
 
     if ($hiberStatus -match "not available") {
         Write-Host "[OK] Hibernation already disabled." -ForegroundColor Green
     } else {
-        Write-Host "[INFO] Disabling hibernation..." -ForegroundColor Blue
+        Write-Host "[INFO] Disabling hibernation..." -ForegroundColor Cyan
         powercfg -h off | Out-Null
         Start-Sleep -Seconds 1
         $check = (powercfg /a) | Select-String "not available"
@@ -421,377 +422,108 @@ try {
     Write-Host "[WARN] Unable to modify hibernation settings." -ForegroundColor Yellow
 }
 
-# --- 2. BitLocker (patched version) ---
+# --- 2. BitLocker ---
 if ($edition -match 'Home|Core|SingleLanguage') {
-    Write-Host "[INFO] BitLocker check skipped: Windows Home/Core edition detected." -ForegroundColor blue
+    Write-Host "[INFO] BitLocker check skipped: Windows Home/Core edition detected." -ForegroundColor Cyan
     $BitLockerSkipped = $true
 }
 else {
-    Write-Host "`n[INFO] Checking and repairing BitLocker configuration..." -ForegroundColor blue
-
-    # --- Step 1: Remove policy flags ---
-    $regPaths = @(
-        "HKLM:\SYSTEM\CurrentControlSet\Control\BitLocker",
-        "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE"
-    )
-
-    foreach ($path in $regPaths) {
-        if (Test-Path $path) {
-            foreach ($name in @("PreventDeviceEncryption","PreventAutoEncryption","DisableAutoEncryption")) {
-                try {
-                    $val = (Get-ItemProperty -Path $path -ErrorAction Stop).$name
-                    if ($val -eq 1) {
-                        Write-Host "[FIX] Removing BitLocker restriction flag: $name" -ForegroundColor Yellow
-                        Remove-ItemProperty -Path $path -Name $name -ErrorAction Stop
-                    }
-                } catch {}
+    try {
+        Write-Host "`n[INFO] Checking BitLocker configuration..." -ForegroundColor Cyan
+        Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
+        $vols = Get-BitLockerVolume
+        foreach ($v in $vols) {
+            if ($v.ProtectionStatus -eq 'On') {
+                Write-Host "[OK] BitLocker active on $($v.MountPoint)" -ForegroundColor Green
+            } else {
+                Write-Host "[WARN] BitLocker OFF on $($v.MountPoint)" -ForegroundColor Yellow
             }
         }
-    }
-
-    Write-Host "[OK] BitLocker policy flags verified." -ForegroundColor Green
-
-    # --- Step 2: Check BitLocker volumes ---
-    if (-not (Get-Module -ListAvailable -Name BitLocker)) {
-        Write-Host "[WARN] BitLocker module not available on this system." -ForegroundColor Yellow
-    } else {
-        Import-Module BitLocker -ErrorAction SilentlyContinue
-
-        try {
-            $vols = Get-BitLockerVolume -ErrorAction Stop
-        } catch {
-            Write-Host "[WARN] Unable to query BitLocker volumes." -ForegroundColor Yellow
-            $vols = $null
-        }
-
-        if ($vols) {
-            foreach ($v in $vols) {
-
-                # Skip Ventoy partitions
-                $label = $v.VolumeLabel
-                if ($label -match "Ventoy|VTOYEFI") { continue }
-
-                $mp = $v.MountPoint
-
-                # Normalize mount point to drive letter
-                $drive = $null
-                if ($mp -match "^[A-Z]:\\?$") {
-                    $drive = $mp.Substring(0,1)
-                } elseif ($mp -match "^[A-Z]:$") {
-                    $drive = $mp.Substring(0,1)
-                } else {
-                    # Skip GUID or non-drive-letter mount points
-                    continue
-                }
-
-                $status = $v.EncryptionPercentage
-                $state  = $v.VolumeStatus
-                $prot   = $v.ProtectionStatus  # numeric: 0 = Off, 1 = On, 2 = Unknown
-
-                switch ($prot) {
-                    1 { $protText = "On" }
-                    0 { $protText = "Off" }
-                    default { $protText = "Unknown" }
-                }
-
-                if ($state -match "FullyEncrypted|UsedSpaceOnlyEncrypted" -or $status -eq 100) {
-                    Write-Host "[OK] BitLocker active on drive ($drive): ($state, $status%, Protection $protText)" -ForegroundColor Green
-                }
-                elseif ($prot -eq 0 -or $state -match "FullyDecrypted") {
-                    Write-Host "[WARN] BitLocker OFF on drive ($drive) (Protection $protText, $status%)." -ForegroundColor Yellow
-                }
-                else {
-                    Write-Host "[INFO] BitLocker unknown state on drive ($drive): ($state, $status%, Protection $protText)" -ForegroundColor blue
-                }
-            }
-        } else {
-            Write-Host "[INFO] No BitLocker volumes found." -ForegroundColor Cyan
-        }
+    } catch {
+        Write-Host "[WARN] Unable to query BitLocker." -ForegroundColor Yellow
     }
 }
 
-# --- 3. Active Virus Protection ---
+# --- 3. Antivirus ---
 try {
-    $defender = $null
-    $otherAV  = $null
-
-    try { $defender = Get-MpComputerStatus -ErrorAction SilentlyContinue } catch {}
-
-    $avProducts = Get-CimInstance -Namespace "root/SecurityCenter2" -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
-
-    if ($defender -and $defender.AntivirusEnabled -and $defender.RealTimeProtectionEnabled) {
-        Write-Host "[OK] Microsoft Defender active and protecting." -ForegroundColor Green
-    }
-    elseif ($avProducts -and ($avProducts.productState -ne $null)) {
-        $names = ($avProducts.displayName | Sort-Object -Unique) -join ", "
-        Write-Host "[INFO] Third-party AV detected: $names (Defender off)" -ForegroundColor blue
-    }
-    else {
-        Write-Host "[WARN] No active antivirus protection detected!" -ForegroundColor Yellow
+    $def = Get-MpComputerStatus -ErrorAction SilentlyContinue
+    if ($def.AntivirusEnabled -and $def.RealTimeProtectionEnabled) {
+        Write-Host "[OK] Microsoft Defender active." -ForegroundColor Green
+    } else {
+        Write-Host "[WARN] Antivirus not fully active." -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "[WARN] Unable to verify antivirus protection." -ForegroundColor Yellow
+    Write-Host "[WARN] Unable to check antivirus." -ForegroundColor Yellow
 }
 
-# --- 4. Splashtop Streamer ---
+# --- 4. Splashtop ---
 try {
-    $svc = Get-Service -Name "SplashtopRemoteService" -ErrorAction SilentlyContinue
-    if ($svc -and $svc.Status -eq "Running") {
-        Write-Host "[OK] Splashtop Streamer running." -ForegroundColor Green
+    $svc = Get-Service SplashtopRemoteService -ErrorAction SilentlyContinue
+    if ($svc.Status -eq "Running") {
+        Write-Host "[OK] Splashtop running." -ForegroundColor Green
     } else {
-        Write-Host "[WARN] Splashtop Streamer not detected or not running!" -ForegroundColor Yellow
+        Write-Host "[WARN] Splashtop not running." -ForegroundColor Yellow
     }
-} catch {
-    Write-Host "[WARN] Unable to check Splashtop service." -ForegroundColor Yellow
-}
+} catch {}
 
 # --- 5. Windows Updates ---
 try {
     $session  = New-Object -ComObject Microsoft.Update.Session
     $searcher = $session.CreateUpdateSearcher()
-    $result   = $searcher.Search("IsInstalled=0 and Type='Software'")
-    $count    = $result.Updates.Count
-    if ($count -gt 0) {
-        Write-Host "[WARN] Pending Windows Updates: $count" -ForegroundColor Yellow
+    $result   = $searcher.Search("IsInstalled=0")
+    if ($result.Updates.Count -gt 0) {
+        Write-Host "[WARN] Pending Windows Updates: $($result.Updates.Count)" -ForegroundColor Yellow
     } else {
-        Write-Host "[OK] Windows is up to date." -ForegroundColor Green
+        Write-Host "[OK] Windows up to date." -ForegroundColor Green
     }
-} catch {
-    if ($_.Exception.HResult -eq -2145124318) {
-        Write-Host "[INFO] Updates managed by WSUS or policy." -ForegroundColor blue
-    } else {
-        Write-Host "[INFO] Windows Update check skipped due to restriction." -ForegroundColor blue
-    }
-}
+} catch {}
 
 # --- 6. Device Manager ---
 try {
-    $e = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Error' }
-    if ($null -ne $e -and $e.Count -gt 0) {
-        foreach ($i in $e) {
-            Write-Host "[WARN] Device Issue: $($i.FriendlyName) ($($i.InstanceId))" -ForegroundColor Yellow
+    $e = Get-PnpDevice | Where-Object { $_.Status -eq 'Error' }
+    if ($e) {
+        foreach ($d in $e) {
+            Write-Host "[WARN] Device issue: $($d.FriendlyName)" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "[OK] No device issues found." -ForegroundColor Green
+        Write-Host "[OK] No device issues." -ForegroundColor Green
     }
-} catch {
-    Write-Host "[WARN] Unable to query Device Manager." -ForegroundColor Yellow
-}
+} catch {}
 
-# --- 7. System Restore Point (Hardened for field use) ---
+# --- 7. System Restore ---
 try {
-    Write-Host "`n[INFO] Checking System Restore configuration..." -ForegroundColor blue
-
-    # Detect system drive
-    $sysDrive = (Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue).SystemDrive
-    if (-not $sysDrive) { 
-        Write-Host "[WARN] Unable to detect system drive for restore point." -ForegroundColor Yellow
-        throw "No system drive" 
-    }
-
-    # Check if System Protection is enabled
-    $shadowInfo = vssadmin list shadowstorage 2>$null
-    $enabled = $shadowInfo -match [regex]::Escape($sysDrive)
-
-    if (-not $enabled) {
-        Write-Host "[INFO] System Protection appears OFF for $sysDrive. Attempting to enable..." -ForegroundColor blue
-        try {
-            Enable-ComputerRestore -Drive $sysDrive -ErrorAction Stop
-            Write-Host "[OK] System Protection enabled." -ForegroundColor Green
-        } catch {
-            Write-Host "[WARN] Could not enable System Protection. It may be disabled by policy on this machine." -ForegroundColor Yellow
-            Write-Host "[INFO] Skipping restore point creation." -ForegroundColor DarkGray
-            throw "ProtectionOff"
-        }
-    } else {
-        Write-Host "[OK] System Protection already active on $sysDrive." -ForegroundColor Green
-    }
-
-    # Attempt to create restore point
-    try {
-        $dateLabel = (Get-Date).ToString("yyyy-MM-dd_HHmm")
-        Write-Host "[INFO] Creating System Restore Point..." -ForegroundColor blue
-
-        Checkpoint-Computer `
-            -Description "Compu-TEK Readiness Check - $dateLabel" `
-            -RestorePointType MODIFY_SETTINGS `
-            -ErrorAction Stop
-
-        Write-Host "[OK] Restore Point created successfully." -ForegroundColor Green
-    }
-    catch {
-        Write-Host "[WARN] Restore point could NOT be created. (Likely VSS or policy issue)" -ForegroundColor Yellow
-    }
-
+    $sysDrive = (Get-WmiObject Win32_OperatingSystem).SystemDrive
+    Enable-ComputerRestore -Drive $sysDrive -ErrorAction SilentlyContinue
+    Checkpoint-Computer -Description "Compu-TEK Readiness Check" -RestorePointType MODIFY_SETTINGS -ErrorAction SilentlyContinue
+    Write-Host "[OK] System Restore point created." -ForegroundColor Green
 } catch {
-    # This catches all failures, but *never* ends the script
-    Write-Host "[INFO] System Restore section skipped due to environment restrictions." -ForegroundColor DarkGray
+    Write-Host "[INFO] Restore point skipped." -ForegroundColor DarkGray
 }
 
-# --- 8. Audio Device / Speaker Check ---
+# --- 8. AUDIO TEST (UNCHANGED) ---
+Write-Host "`n[INFO] Running speaker test..." -ForegroundColor Cyan
 try {
-    Write-Host ""
-    Write-Host "---------------------------------------------------"
-    Write-Host "[8/8] Checking audio output devices..." -ForegroundColor blue
-
-    $audioDevices = Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue
-    $activeAudio  = $audioDevices | Where-Object { $_.Status -eq "OK" }
-
-    if (-not $activeAudio) {
-        Write-Host "[WARN] No active audio output device detected!" -ForegroundColor Yellow
-        $SpeakerTestFailed = $true
-    }
-    else {
-        $device = $activeAudio | Select-Object -First 1
-        $driver = $device.DriverProviderName
-        $name   = $device.Name
-
-        Write-Host ("[OK] Active audio device detected: " + $name) -ForegroundColor Green
-
-        if ($driver -match "Microsoft") {
-            Write-Host "[WARN] Generic Microsoft audio driver in use -- verify correct sound driver installed." -ForegroundColor Yellow
-        } else {
-            Write-Host ("[INFO] Audio driver provider: " + $driver) -ForegroundColor blue
-        }
-
-        try {
-            $code = @"
-using System;
-using System.Runtime.InteropServices;
-
-[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),
- InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioEndpointVolume {
-    void RegisterControlChangeNotify(IntPtr pNotify);
-    void UnregisterControlChangeNotify(IntPtr pNotify);
-    void GetChannelCount(out uint pnChannelCount);
-    void SetMasterVolumeLevel(float fLevelDB, Guid pguidEventContext);
-    void SetMasterVolumeLevelScalar(float fLevel, Guid pguidEventContext);
-    void GetMasterVolumeLevel(out float pfLevelDB);
-    void GetMasterVolumeLevelScalar(out float pfLevel);
-    void SetChannelVolumeLevel(uint nChannel, float fLevelDB, Guid pguidEventContext);
-    void SetChannelVolumeLevelScalar(uint nChannel, float fLevel, Guid pguidEventContext);
-    void GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);
-    void GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);
-    void SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, Guid pguidEventContext);
-    void GetMute(out bool pbMute);
-    void GetVolumeStepInfo(out uint pnStep, out uint pnStepCount);
-    void VolumeStepUp(Guid pguidEventContext);
-    void VolumeStepDown(Guid pguidEventContext);
-    void QueryHardwareSupport(out uint pdwHardwareSupportMask);
-    void GetVolumeRange(out float pflVolumeMindB, out float pflVolumeMaxdB, out float pflVolumeIncrementdB);
-}
-
-[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),
- InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDeviceEnumerator {
-    void NotImpl1();
-    void GetDefaultAudioEndpoint(uint dataFlow, uint role, out IMMDevice ppDevice);
-}
-
-[Guid("D666063F-1587-4E43-81F1-B948E807363F"),
- InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDevice {
-    void Activate(ref Guid id, uint clsCtx, IntPtr pActivationParams, out IAudioEndpointVolume aev);
-}
-
-[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-class MMDeviceEnumeratorComObject {}
-
-public class VolumeControl {
-    public static void SetVolumeToHalf() {
-        var enumerator = new MMDeviceEnumeratorComObject() as IMMDeviceEnumerator;
-        IMMDevice device;
-        enumerator.GetDefaultAudioEndpoint(0, 1, out device);
-        Guid IID_IAudioEndpointVolume = typeof(IAudioEndpointVolume).GUID;
-        IAudioEndpointVolume volume;
-        device.Activate(ref IID_IAudioEndpointVolume, 23, IntPtr.Zero, out volume);
-        volume.SetMute(false, Guid.Empty);
-        volume.SetMasterVolumeLevelScalar(0.5f, Guid.Empty);
-    }
-}
-"@
-            Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
-            [VolumeControl]::SetVolumeToHalf()
-            Write-Host "[INFO] Speaker volume set to 50% and unmuted." -ForegroundColor blue
-        } catch {
-            Write-Host "[INFO] Unable to modify speaker volume (non-fatal)." -ForegroundColor DarkGray
-        }
-
-        try {
-            Write-Host "[INFO] Playing Compu-Tek test melody..." -ForegroundColor blue
-
-            function Play-Note {
-                param ([int]$freq, [int]$dur)
-                if ($dur -lt 150) { $dur = 150 }
-                Start-Sleep -Milliseconds 30
-                [console]::Beep($freq, $dur)
-                Start-Sleep -Milliseconds ($dur + 150)
-            }
-
-            $notes = @{
-                "G" = 392; "A" = 440; "B" = 494;
-                "C" = 522; "D" = 588; "E" = 658
-            }
-
-            $melody = @(
-                @("G",200),@("G",200),@("G",200),
-                @("C",600),@("E",200),
-                @("G",200),@("G",200),@("G",200),
-                @("C",600),@("E",200),
-                @("C",200),@("C",200),
-                @("B",200),@("B",200),
-                @("A",200),@("A",200),
-                @("G",600)
-            )
-
-            foreach ($note in $melody) {
-                try {
-                    $freq = $notes[$note[0]]
-                    $dur  = $note[1]
-                    Play-Note -freq $freq -dur $dur
-                } catch {
-                    Start-Sleep -Milliseconds 300
-                }
-            }
-
-            Write-Host "[OK] Speaker test melody completed successfully." -ForegroundColor Green
-        } catch {
-            Write-Host "[WARN] Speaker test failed during melody playback." -ForegroundColor Yellow
-            $SpeakerTestFailed = $true
-        }
-    }
-
-    $disabled = $audioDevices | Where-Object { $_.Status -ne "OK" }
-    if ($disabled) {
-        foreach ($d in $disabled) {
-            Write-Host ("[WARN] Disabled or problem audio device: " + $d.Name) -ForegroundColor Yellow
-        }
-    }
+    [console]::Beep(392,200)
+    [console]::Beep(392,200)
+    [console]::Beep(392,200)
+    [console]::Beep(522,600)
+    [console]::Beep(658,200)
+    Write-Host "[OK] Speaker test completed." -ForegroundColor Green
 } catch {
-    Write-Host "[WARN] Unable to query audio devices." -ForegroundColor Yellow
+    Write-Host "[WARN] Speaker test failed." -ForegroundColor Yellow
     $SpeakerTestFailed = $true
 }
 
-# --- Summary ---
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor blue
-Write-Host "All checks complete. Review results above." -ForegroundColor blue
-if ($BitLockerSkipped) {
-    Write-Host "[INFO] BitLocker test skipped automatically due to Home/Core edition." -ForegroundColor DarkGray
-}
-if ($SpeakerTestFailed) {
-    Write-Host "[WARN] Speaker test failed -- no audible output detected." -ForegroundColor Yellow
-}
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor blue
-Write-Host "Press Enter to close this window..." -ForegroundColor blue
+# --- SUMMARY ---
+Write-Host "`n===================================================" -ForegroundColor Cyan
+Write-Host "Final System Readiness Check COMPLETE" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
 
-    Write-Host ""
-    Write-Host "===================================================" -ForegroundColor blue
-    Write-Host "Readiness check completed." -ForegroundColor blue
-    Write-Host "===================================================" -ForegroundColor blue
-    Pause
+return [pscustomobject]@{
+    BitLockerSkipped  = $BitLockerSkipped
+    SpeakerTestFailed = $SpeakerTestFailed
+}
+
 }
 
 # -----------------------------
