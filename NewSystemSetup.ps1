@@ -371,6 +371,46 @@ function Run-SmartFirstTimeSetup {
     Write-Host ""
 }
 
+# --- Summary ---
+Write-Host ""
+Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host "All checks complete. Review results above." -ForegroundColor Cyan
+if ($BitLockerSkipped) {
+    Write-Host "[INFO] BitLocker test skipped automatically due to Home/Core edition." -ForegroundColor DarkGray
+}
+if ($SpeakerTestFailed) {
+    Write-Host "[WARN] Speaker test failed -- no audible output detected." -ForegroundColor Yellow
+}
+Write-Host ""
+Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
+[void][System.Console]::ReadLine()
+
+# -----------------------------
+# MENU
+# -----------------------------
+function Show-Menu {
+    Write-Host "=========================================="
+    Write-Host "       System Management Menu"
+    Write-Host "=========================================="
+    Write-Host "1. First Time Setup (Smart Auto Mode) [Default]"
+    Write-Host "2. final system check"
+    Write-Host "3. Restart Computer"
+    Write-Host "4. Exit and Cleanup"
+    Write-Host "=========================================="
+    Write-Host "Press Enter for default (1)."
+}
+
+function MenuSelection {
+    param([int]$selection)
+    switch ($selection) {
+        1 { Run-SmartFirstTimeSetup }
+        2 { Write-Host "Restarting now..."; shutdown.exe /r /t 0 }
+        3 { Write-Host "Cleaning up and exiting..."; Remove-DesktopShortcut "Computek Setup Script"; exit }
+        default { Write-Host "Invalid selection." }
+    }
+}
+
 # =====================================================
 #  Option 2: FINAL SYSTEM READINESS CHECK - COMPU-TEK
 # =====================================================
@@ -745,46 +785,6 @@ public class VolumeControl {
 } catch {
     Write-Host "[WARN] Unable to query audio devices." -ForegroundColor Yellow
     $SpeakerTestFailed = $true
-}
-
-# --- Summary ---
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "All checks complete. Review results above." -ForegroundColor Cyan
-if ($BitLockerSkipped) {
-    Write-Host "[INFO] BitLocker test skipped automatically due to Home/Core edition." -ForegroundColor DarkGray
-}
-if ($SpeakerTestFailed) {
-    Write-Host "[WARN] Speaker test failed -- no audible output detected." -ForegroundColor Yellow
-}
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
-[void][System.Console]::ReadLine()
-
-# -----------------------------
-# MENU
-# -----------------------------
-function Show-Menu {
-    Write-Host "=========================================="
-    Write-Host "       System Management Menu"
-    Write-Host "=========================================="
-    Write-Host "1. First Time Setup (Smart Auto Mode) [Default]"
-    Write-Host "2. final system check"
-    Write-Host "3. Restart Computer"
-    Write-Host "4. Exit and Cleanup"
-    Write-Host "=========================================="
-    Write-Host "Press Enter for default (1)."
-}
-
-function MenuSelection {
-    param([int]$selection)
-    switch ($selection) {
-        1 { Run-SmartFirstTimeSetup }
-        2 { Write-Host "Restarting now..."; shutdown.exe /r /t 0 }
-        3 { Write-Host "Cleaning up and exiting..."; Remove-DesktopShortcut "Computek Setup Script"; exit }
-        default { Write-Host "Invalid selection." }
-    }
 }
 
 # -----------------------------
