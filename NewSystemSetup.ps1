@@ -749,7 +749,6 @@ public class VolumeControl {
     $SpeakerTestFailed = $true
 }
 
-
 # --- Summary ---
 Write-Host ""
 Write-Host "===================================================" -ForegroundColor Blue
