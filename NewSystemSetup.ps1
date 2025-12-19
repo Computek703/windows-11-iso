@@ -15,7 +15,7 @@ function Set-ConsoleColor ($bc, $fc) {
     $Host.UI.RawUI.ForegroundColor = $fc
     Clear-Host
 }
-Set-ConsoleColor 'Green' 'red'
+Set-ConsoleColor 'Green' 'Black'
 
 $asciiArt = @"
   #####                                    #######               
