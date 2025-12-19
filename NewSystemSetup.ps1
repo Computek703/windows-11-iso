@@ -376,16 +376,16 @@ function Run-FinalSystemReadinessCheck {
     $Host.UI.RawUI.WindowTitle = "Final System Readiness Check - Compu-TEK"
     Clear-Host
 
-    Write-Host "`n===================================================" -ForegroundColor Cyan
-    Write-Host "      FINAL SYSTEM READINESS CHECK - COMPU-TEK" -ForegroundColor Cyan
-    Write-Host "===================================================`n" -ForegroundColor Cyan
+    Write-Host "`n===================================================" -ForegroundColor blue
+    Write-Host "      FINAL SYSTEM READINESS CHECK - COMPU-TEK" -ForegroundColor blue
+    Write-Host "===================================================`n" -ForegroundColor blue
 
     $BitLockerSkipped   = $false
     $SpeakerTestFailed  = $false
 
 # --- 1. Windows Edition & Activation ---
 $edition = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID
-Write-Host "[INFO] Windows Edition: $edition" -ForegroundColor Cyan
+Write-Host "[INFO] Windows Edition: $edition" -ForegroundColor blue
 
 try {
     $l = Get-CimInstance SoftwareLicensingProduct |
@@ -401,13 +401,13 @@ try {
 
 # --- 1b. Disable and verify Hibernation ---
 try {
-    Write-Host "`n[INFO] Checking hibernation status..." -ForegroundColor Cyan
+    Write-Host "`n[INFO] Checking hibernation status..." -ForegroundColor blue
     $hiberStatus = (powercfg /a) | Select-String "Hibernate"
 
     if ($hiberStatus -match "not available") {
         Write-Host "[OK] Hibernation already disabled." -ForegroundColor Green
     } else {
-        Write-Host "[INFO] Disabling hibernation..." -ForegroundColor Cyan
+        Write-Host "[INFO] Disabling hibernation..." -ForegroundColor Blue
         powercfg -h off | Out-Null
         Start-Sleep -Seconds 1
         $check = (powercfg /a) | Select-String "not available"
@@ -421,67 +421,92 @@ try {
     Write-Host "[WARN] Unable to modify hibernation settings." -ForegroundColor Yellow
 }
 
-# --- 2. BitLocker (skip for Home/Core editions) ---
-if ($edition -match 'Home' -or $edition -match 'Core' -or $edition -match 'SingleLanguage') {
-    Write-Host "[INFO] BitLocker check skipped: Windows Home/Core edition detected." -ForegroundColor Cyan
+# --- 2. BitLocker (patched version) ---
+if ($edition -match 'Home|Core|SingleLanguage') {
+    Write-Host "[INFO] BitLocker check skipped: Windows Home/Core edition detected." -ForegroundColor blue
     $BitLockerSkipped = $true
 }
 else {
-    try {
-        Write-Host "`n[INFO] Checking and repairing BitLocker configuration..." -ForegroundColor Cyan
+    Write-Host "`n[INFO] Checking and repairing BitLocker configuration..." -ForegroundColor blue
 
-        # --- Step 1: Remove prevention flags that could block encryption ---
-        $regPaths = @(
-            "HKLM:\SYSTEM\CurrentControlSet\Control\BitLocker",
-            "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE"
-        )
+    # --- Step 1: Remove policy flags ---
+    $regPaths = @(
+        "HKLM:\SYSTEM\CurrentControlSet\Control\BitLocker",
+        "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE"
+    )
 
-        foreach ($path in $regPaths) {
-            if (Test-Path $path) {
-                foreach ($name in @("PreventDeviceEncryption", "PreventAutoEncryption", "DisableAutoEncryption")) {
-                    $val = (Get-ItemProperty -Path $path -ErrorAction SilentlyContinue).$name
+    foreach ($path in $regPaths) {
+        if (Test-Path $path) {
+            foreach ($name in @("PreventDeviceEncryption","PreventAutoEncryption","DisableAutoEncryption")) {
+                try {
+                    $val = (Get-ItemProperty -Path $path -ErrorAction Stop).$name
                     if ($val -eq 1) {
                         Write-Host "[FIX] Removing BitLocker restriction flag: $name" -ForegroundColor Yellow
-                        Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+                        Remove-ItemProperty -Path $path -Name $name -ErrorAction Stop
                     }
-                }
+                } catch {}
             }
         }
-        Write-Host "[OK] BitLocker policy flags verified." -ForegroundColor Green
+    }
 
-        # --- Step 2: Check BitLocker status per drive ---
-        $oldPref = $WarningPreference
-        $WarningPreference = 'SilentlyContinue'
-        Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
-        $WarningPreference = $oldPref
+    Write-Host "[OK] BitLocker policy flags verified." -ForegroundColor Green
 
-        $vols = Get-BitLockerVolume -ErrorAction Stop
+    # --- Step 2: Check BitLocker volumes ---
+    if (-not (Get-Module -ListAvailable -Name BitLocker)) {
+        Write-Host "[WARN] BitLocker module not available on this system." -ForegroundColor Yellow
+    } else {
+        Import-Module BitLocker -ErrorAction SilentlyContinue
+
+        try {
+            $vols = Get-BitLockerVolume -ErrorAction Stop
+        } catch {
+            Write-Host "[WARN] Unable to query BitLocker volumes." -ForegroundColor Yellow
+            $vols = $null
+        }
+
         if ($vols) {
             foreach ($v in $vols) {
-                $label = (Get-Volume -DriveLetter $v.MountPoint.TrimEnd(':') -ErrorAction SilentlyContinue).FileSystemLabel
-                if ($label -match 'Ventoy' -or $label -match 'VTOYEFI' -or
-                    $v.MountPoint -match 'Ventoy' -or $v.MountPoint -match 'VTOYEFI') { continue }
+
+                # Skip Ventoy partitions
+                $label = $v.VolumeLabel
+                if ($label -match "Ventoy|VTOYEFI") { continue }
+
+                $mp = $v.MountPoint
+
+                # Normalize mount point to drive letter
+                $drive = $null
+                if ($mp -match "^[A-Z]:\\?$") {
+                    $drive = $mp.Substring(0,1)
+                } elseif ($mp -match "^[A-Z]:$") {
+                    $drive = $mp.Substring(0,1)
+                } else {
+                    # Skip GUID or non-drive-letter mount points
+                    continue
+                }
 
                 $status = $v.EncryptionPercentage
                 $state  = $v.VolumeStatus
-                $prot   = $v.ProtectionStatus
+                $prot   = $v.ProtectionStatus  # numeric: 0 = Off, 1 = On, 2 = Unknown
 
-                if ($state -match "FullyEncrypted" -or $state -match "UsedSpaceOnlyEncrypted" -or $status -eq 100) {
-                    Write-Host "[OK] BitLocker active on drive $($v.MountPoint) ($state, $status%)" -ForegroundColor Green
+                switch ($prot) {
+                    1 { $protText = "On" }
+                    0 { $protText = "Off" }
+                    default { $protText = "Unknown" }
                 }
-                elseif ($prot -eq 'Off' -or $state -match "FullyDecrypted") {
-                    Write-Host "[WARN] BitLocker off on drive $($v.MountPoint)" -ForegroundColor Yellow
+
+                if ($state -match "FullyEncrypted|UsedSpaceOnlyEncrypted" -or $status -eq 100) {
+                    Write-Host "[OK] BitLocker active on drive $drive: ($state, $status%, Protection $protText)" -ForegroundColor Green
+                }
+                elseif ($prot -eq 0 -or $state -match "FullyDecrypted") {
+                    Write-Host "[WARN] BitLocker OFF on drive $drive (Protection $protText, $status%)." -ForegroundColor Yellow
                 }
                 else {
-                    Write-Host "[INFO] BitLocker unknown state on $($v.MountPoint) ($state)" -ForegroundColor Cyan
+                    Write-Host "[INFO] BitLocker unknown state on drive $drive: ($state, $status%, Protection $protText)" -ForegroundColor blue
                 }
             }
         } else {
             Write-Host "[INFO] No BitLocker volumes found." -ForegroundColor Cyan
         }
-    }
-    catch {
-        Write-Host "[WARN] Unable to query BitLocker status or clear flags." -ForegroundColor Yellow
     }
 }
 
@@ -499,7 +524,7 @@ try {
     }
     elseif ($avProducts -and ($avProducts.productState -ne $null)) {
         $names = ($avProducts.displayName | Sort-Object -Unique) -join ", "
-        Write-Host "[INFO] Third-party AV detected: $names (Defender off)" -ForegroundColor Cyan
+        Write-Host "[INFO] Third-party AV detected: $names (Defender off)" -ForegroundColor blue
     }
     else {
         Write-Host "[WARN] No active antivirus protection detected!" -ForegroundColor Yellow
@@ -533,9 +558,9 @@ try {
     }
 } catch {
     if ($_.Exception.HResult -eq -2145124318) {
-        Write-Host "[INFO] Updates managed by WSUS or policy." -ForegroundColor Cyan
+        Write-Host "[INFO] Updates managed by WSUS or policy." -ForegroundColor blue
     } else {
-        Write-Host "[INFO] Windows Update check skipped due to restriction." -ForegroundColor Cyan
+        Write-Host "[INFO] Windows Update check skipped due to restriction." -ForegroundColor blue
     }
 }
 
@@ -555,7 +580,7 @@ try {
 
 # --- 7. System Restore Point (Hardened for field use) ---
 try {
-    Write-Host "`n[INFO] Checking System Restore configuration..." -ForegroundColor Cyan
+    Write-Host "`n[INFO] Checking System Restore configuration..." -ForegroundColor blue
 
     # Detect system drive
     $sysDrive = (Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue).SystemDrive
@@ -569,7 +594,7 @@ try {
     $enabled = $shadowInfo -match [regex]::Escape($sysDrive)
 
     if (-not $enabled) {
-        Write-Host "[INFO] System Protection appears OFF for $sysDrive. Attempting to enable..." -ForegroundColor Cyan
+        Write-Host "[INFO] System Protection appears OFF for $sysDrive. Attempting to enable..." -ForegroundColor blue
         try {
             Enable-ComputerRestore -Drive $sysDrive -ErrorAction Stop
             Write-Host "[OK] System Protection enabled." -ForegroundColor Green
@@ -585,7 +610,7 @@ try {
     # Attempt to create restore point
     try {
         $dateLabel = (Get-Date).ToString("yyyy-MM-dd_HHmm")
-        Write-Host "[INFO] Creating System Restore Point..." -ForegroundColor Cyan
+        Write-Host "[INFO] Creating System Restore Point..." -ForegroundColor blue
 
         Checkpoint-Computer `
             -Description "Compu-TEK Readiness Check - $dateLabel" `
@@ -607,7 +632,7 @@ try {
 try {
     Write-Host ""
     Write-Host "---------------------------------------------------"
-    Write-Host "[8/8] Checking audio output devices..." -ForegroundColor Cyan
+    Write-Host "[8/8] Checking audio output devices..." -ForegroundColor blue
 
     $audioDevices = Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue
     $activeAudio  = $audioDevices | Where-Object { $_.Status -eq "OK" }
@@ -626,7 +651,7 @@ try {
         if ($driver -match "Microsoft") {
             Write-Host "[WARN] Generic Microsoft audio driver in use -- verify correct sound driver installed." -ForegroundColor Yellow
         } else {
-            Write-Host ("[INFO] Audio driver provider: " + $driver) -ForegroundColor Cyan
+            Write-Host ("[INFO] Audio driver provider: " + $driver) -ForegroundColor blue
         }
 
         try {
@@ -688,13 +713,13 @@ public class VolumeControl {
 "@
             Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
             [VolumeControl]::SetVolumeToHalf()
-            Write-Host "[INFO] Speaker volume set to 50% and unmuted." -ForegroundColor Cyan
+            Write-Host "[INFO] Speaker volume set to 50% and unmuted." -ForegroundColor blue
         } catch {
             Write-Host "[INFO] Unable to modify speaker volume (non-fatal)." -ForegroundColor DarkGray
         }
 
         try {
-            Write-Host "[INFO] Playing Compu-Tek test melody..." -ForegroundColor Cyan
+            Write-Host "[INFO] Playing Compu-Tek test melody..." -ForegroundColor blue
 
             function Play-Note {
                 param ([int]$freq, [int]$dur)
@@ -750,8 +775,8 @@ public class VolumeControl {
 
 # --- Summary ---
 Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "All checks complete. Review results above." -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor blue
+Write-Host "All checks complete. Review results above." -ForegroundColor blue
 if ($BitLockerSkipped) {
     Write-Host "[INFO] BitLocker test skipped automatically due to Home/Core edition." -ForegroundColor DarkGray
 }
@@ -759,16 +784,13 @@ if ($SpeakerTestFailed) {
     Write-Host "[WARN] Speaker test failed -- no audible output detected." -ForegroundColor Yellow
 }
 Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
-
-# (Windows Edition, BitLocker, AV, Splashtop,
-    # Updates, Devices, Restore Point, Audio Test, etc)
+Write-Host "===================================================" -ForegroundColor blue
+Write-Host "Press Enter to close this window..." -ForegroundColor blue
 
     Write-Host ""
-    Write-Host "===================================================" -ForegroundColor Cyan
-    Write-Host "Readiness check completed." -ForegroundColor Cyan
-    Write-Host "===================================================" -ForegroundColor Cyan
+    Write-Host "===================================================" -ForegroundColor blue
+    Write-Host "Readiness check completed." -ForegroundColor blue
+    Write-Host "===================================================" -ForegroundColor blue
     Pause
 }
 
