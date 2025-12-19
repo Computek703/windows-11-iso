@@ -15,7 +15,7 @@ function Set-ConsoleColor ($bc, $fc) {
     $Host.UI.RawUI.ForegroundColor = $fc
     Clear-Host
 }
-Set-ConsoleColor 'green' 'white'
+Set-ConsoleColor 'White' 'white'
 
 $asciiArt = @"
   #####                                    #######               
@@ -335,10 +335,10 @@ function Start-CompletionWatcher {
                 # Final banner
                 cls
                 Write-Host ""
-                Write-Host "###############################################" -ForegroundColor Green
-                Write-Host "#     COMPU-TEK SETUP FULLY COMPLETE          #" -ForegroundColor Green
-                Write-Host "#  Windows Updates + Software installs done   #" -ForegroundColor Green
-                Write-Host "###############################################" -ForegroundColor Green
+                Write-Host "###############################################" -ForegroundColor White
+                Write-Host "#     COMPU-TEK SETUP FULLY COMPLETE          #" -ForegroundColor White
+                Write-Host "#  Windows Updates + Software installs done   #" -ForegroundColor White
+                Write-Host "###############################################" -ForegroundColor White
                 Write-Host ""
                 break
             }
@@ -392,7 +392,7 @@ try {
     $l = Get-CimInstance SoftwareLicensingProduct |
          Where-Object { $_.PartialProductKey -and $_.LicenseStatus -eq 1 }
     if ($l) {
-        Write-Host "[OK] Windows is activated." -ForegroundColor Green
+        Write-Host "[OK] Windows is activated." -ForegroundColor White
     } else {
         Write-Host "[WARN] Windows not activated!" -ForegroundColor Yellow
     }
@@ -406,14 +406,14 @@ try {
     $hiberStatus = (powercfg /a) | Select-String "Hibernate"
 
     if ($hiberStatus -match "not available") {
-        Write-Host "[OK] Hibernation already disabled." -ForegroundColor Green
+        Write-Host "[OK] Hibernation already disabled." -ForegroundColor White
     } else {
         Write-Host "[INFO] Disabling hibernation..." -ForegroundColor Blue
         powercfg -h off | Out-Null
         Start-Sleep -Seconds 1
         $check = (powercfg /a) | Select-String "not available"
         if ($check) {
-            Write-Host "[OK] Hibernation successfully disabled." -ForegroundColor Green
+            Write-Host "[OK] Hibernation successfully disabled." -ForegroundColor White
         } else {
             Write-Host "[WARN] Could not confirm hibernation is off." -ForegroundColor Yellow
         }
@@ -448,7 +448,7 @@ else {
                 }
             }
         }
-        Write-Host "[OK] BitLocker policy flags verified." -ForegroundColor Green
+        Write-Host "[OK] BitLocker policy flags verified." -ForegroundColor White
 
         # --- Step 2: Check BitLocker status per drive ---
         $oldPref = $WarningPreference
@@ -468,7 +468,7 @@ else {
                 $prot   = $v.ProtectionStatus
 
                 if ($state -match "FullyEncrypted" -or $state -match "UsedSpaceOnlyEncrypted" -or $status -eq 100) {
-                    Write-Host "[OK] BitLocker active on drive $($v.MountPoint) ($state, $status%)" -ForegroundColor Green
+                    Write-Host "[OK] BitLocker active on drive $($v.MountPoint) ($state, $status%)" -ForegroundColor White
                 }
                 elseif ($prot -eq 'Off' -or $state -match "FullyDecrypted") {
                     Write-Host "[WARN] BitLocker off on drive $($v.MountPoint)" -ForegroundColor Yellow
@@ -496,7 +496,7 @@ try {
     $avProducts = Get-CimInstance -Namespace "root/SecurityCenter2" -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
 
     if ($defender -and $defender.AntivirusEnabled -and $defender.RealTimeProtectionEnabled) {
-        Write-Host "[OK] Microsoft Defender active and protecting." -ForegroundColor Green
+        Write-Host "[OK] Microsoft Defender active and protecting." -ForegroundColor White
     }
     elseif ($avProducts -and ($avProducts.productState -ne $null)) {
         $names = ($avProducts.displayName | Sort-Object -Unique) -join ", "
@@ -513,7 +513,7 @@ try {
 try {
     $svc = Get-Service -Name "SplashtopRemoteService" -ErrorAction SilentlyContinue
     if ($svc -and $svc.Status -eq "Running") {
-        Write-Host "[OK] Splashtop Streamer running." -ForegroundColor Green
+        Write-Host "[OK] Splashtop Streamer running." -ForegroundColor White
     } else {
         Write-Host "[WARN] Splashtop Streamer not detected or not running!" -ForegroundColor Yellow
     }
@@ -530,7 +530,7 @@ try {
     if ($count -gt 0) {
         Write-Host "[WARN] Pending Windows Updates: $count" -ForegroundColor Yellow
     } else {
-        Write-Host "[OK] Windows is up to date." -ForegroundColor Green
+        Write-Host "[OK] Windows is up to date." -ForegroundColor White
     }
 } catch {
     if ($_.Exception.HResult -eq -2145124318) {
@@ -548,7 +548,7 @@ try {
             Write-Host "[WARN] Device Issue: $($i.FriendlyName) ($($i.InstanceId))" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "[OK] No device issues found." -ForegroundColor Green
+        Write-Host "[OK] No device issues found." -ForegroundColor White
     }
 } catch {
     Write-Host "[WARN] Unable to query Device Manager." -ForegroundColor Yellow
@@ -573,14 +573,14 @@ try {
         Write-Host "[INFO] System Protection appears OFF for $sysDrive. Attempting to enable..." -ForegroundColor Blue
         try {
             Enable-ComputerRestore -Drive $sysDrive -ErrorAction Stop
-            Write-Host "[OK] System Protection enabled." -ForegroundColor Green
+            Write-Host "[OK] System Protection enabled." -ForegroundColor White
         } catch {
             Write-Host "[WARN] Could not enable System Protection. It may be disabled by policy on this machine." -ForegroundColor Yellow
             Write-Host "[INFO] Skipping restore point creation." -ForegroundColor DarkGray
             throw "ProtectionOff"
         }
     } else {
-        Write-Host "[OK] System Protection already active on $sysDrive." -ForegroundColor Green
+        Write-Host "[OK] System Protection already active on $sysDrive." -ForegroundColor White
     }
 
     # Attempt to create restore point
@@ -593,7 +593,7 @@ try {
             -RestorePointType MODIFY_SETTINGS `
             -ErrorAction Stop
 
-        Write-Host "[OK] Restore Point created successfully." -ForegroundColor Green
+        Write-Host "[OK] Restore Point created successfully." -ForegroundColor White
     }
     catch {
         Write-Host "[WARN] Restore point could NOT be created. (Likely VSS or policy issue)" -ForegroundColor Yellow
@@ -622,7 +622,7 @@ try {
         $driver = $device.DriverProviderName
         $name   = $device.Name
 
-        Write-Host ("[OK] Active audio device detected: " + $name) -ForegroundColor Green
+        Write-Host ("[OK] Active audio device detected: " + $name) -ForegroundColor White
 
         if ($driver -match "Microsoft") {
             Write-Host "[WARN] Generic Microsoft audio driver in use -- verify correct sound driver installed." -ForegroundColor Yellow
@@ -731,7 +731,7 @@ public class VolumeControl {
                 }
             }
 
-            Write-Host "[OK] Speaker test melody completed successfully." -ForegroundColor Green
+            Write-Host "[OK] Speaker test melody completed successfully." -ForegroundColor White
         } catch {
             Write-Host "[WARN] Speaker test failed during melody playback." -ForegroundColor Yellow
             $SpeakerTestFailed = $true
