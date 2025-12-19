@@ -26,7 +26,7 @@ $asciiArt = @"
  #     # #    # #    # #      #    #          #    #      #   #  
   #####   ####  #    # #       ####           #    ###### #    # 
 "@
-Write-Host $asciiArt -ForegroundColor Black
+Write-Host $asciiArt -ForegroundColor Cyan
 Write-Host "Welcome to the Compu-TEK Setup Tool!"
 Write-Host "v3.2 (Visible Installs + Watcher + Toast + Ding)"
 Write-Host ""
