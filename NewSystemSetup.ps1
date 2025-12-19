@@ -495,13 +495,13 @@ else {
                 }
 
                 if ($state -match "FullyEncrypted|UsedSpaceOnlyEncrypted" -or $status -eq 100) {
-                    Write-Host "[OK] BitLocker active on drive $drive: ($state, $status%, Protection $protText)" -ForegroundColor Green
+                    Write-Host "[OK] BitLocker active on drive ($drive): ($state, $status%, Protection $protText)" -ForegroundColor Green
                 }
                 elseif ($prot -eq 0 -or $state -match "FullyDecrypted") {
-                    Write-Host "[WARN] BitLocker OFF on drive $drive (Protection $protText, $status%)." -ForegroundColor Yellow
+                    Write-Host "[WARN] BitLocker OFF on drive ($drive) (Protection $protText, $status%)." -ForegroundColor Yellow
                 }
                 else {
-                    Write-Host "[INFO] BitLocker unknown state on drive $drive: ($state, $status%, Protection $protText)" -ForegroundColor blue
+                    Write-Host "[INFO] BitLocker unknown state on drive ($drive): ($state, $status%, Protection $protText)" -ForegroundColor blue
                 }
             }
         } else {
