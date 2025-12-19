@@ -371,21 +371,6 @@ function Run-SmartFirstTimeSetup {
     Write-Host ""
 }
 
-# --- Summary ---
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "All checks complete. Review results above." -ForegroundColor Cyan
-if ($BitLockerSkipped) {
-    Write-Host "[INFO] BitLocker test skipped automatically due to Home/Core edition." -ForegroundColor DarkGray
-}
-if ($SpeakerTestFailed) {
-    Write-Host "[WARN] Speaker test failed -- no audible output detected." -ForegroundColor Yellow
-}
-Write-Host ""
-Write-Host "===================================================" -ForegroundColor Cyan
-Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
-[void][System.Console]::ReadLine()
-
 function Run-FinalSystemReadinessCheck {
 
     $Host.UI.RawUI.WindowTitle = "Final System Readiness Check - Compu-TEK"
@@ -397,17 +382,6 @@ function Run-FinalSystemReadinessCheck {
 
     $BitLockerSkipped   = $false
     $SpeakerTestFailed  = $false
-
-# =====================================================
-#  FINAL SYSTEM READINESS CHECK - COMPU-TEK
-# =====================================================
-$Host.UI.RawUI.WindowTitle = "Final System Readiness Check - Compu-TEK"
-Write-Host "`n===================================================" -ForegroundColor Cyan
-Write-Host "      FINAL SYSTEM READINESS CHECK - COMPU-TEK" -ForegroundColor Cyan
-Write-Host "===================================================`n" -ForegroundColor Cyan
-
-$BitLockerSkipped = $false
-$SpeakerTestFailed = $false
 
 # --- 1. Windows Edition & Activation ---
 $edition = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID
@@ -837,8 +811,8 @@ if (-not ([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdent
 
 do {
     Show-Menu
-    $choice = Read-Host "Enter choice (1-3) [Default = 1]"
-    if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le 3) {
+    $choice = Read-Host "Enter choice (1-4) [Default = 1]"
+    if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le 4) {
         $choice = [int]$choice
     } else {
         $choice = 1
