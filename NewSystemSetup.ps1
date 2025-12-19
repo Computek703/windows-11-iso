@@ -371,7 +371,7 @@ function Run-SmartFirstTimeSetup {
     Write-Host ""
 }
 
-function Invoke-CompuTekFinalReadinessCheck {
+function Run-FinalSystemReadinessCheck {
 
 # =====================================================
 #  FINAL SYSTEM READINESS CHECK - COMPU-TEK
