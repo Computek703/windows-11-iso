@@ -761,7 +761,6 @@ if ($SpeakerTestFailed) {
 Write-Host ""
 Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
-[void][System.Console]::ReadLine()
 
 # (Windows Edition, BitLocker, AV, Splashtop,
     # Updates, Devices, Restore Point, Audio Test, etc)
@@ -772,7 +771,6 @@ Write-Host "Press Enter to close this window..." -ForegroundColor Cyan
     Write-Host "===================================================" -ForegroundColor Cyan
     Pause
 }
-
 
 # -----------------------------
 # MENU
