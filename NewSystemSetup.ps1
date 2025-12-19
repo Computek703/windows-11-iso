@@ -545,7 +545,7 @@ function MenuSelection {
     param([int]$selection)
     switch ($selection) {
         1 { Run-SmartFirstTimeSetup }
-        2 { Run-FinalSystemReadinessCheck}
+        2 { Run-FinalSystemReadinessCheck }
         3 { Write-Host "Restarting now..."; shutdown.exe /r /t 0 }
         4 { Write-Host "Cleaning up and exiting..."; Remove-DesktopShortcut "Computek Setup Script"; exit }
         default { Write-Host "Invalid selection." }
