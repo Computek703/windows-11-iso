@@ -121,7 +121,7 @@ function Install-SoftwarePackages {
         return
     }
 
-$installScript = @'
+    $installScript = @'
 Write-Host "========================================="
 Write-Host "   Compu-TEK Software Installer Window"
 Write-Host "   Chrome + Adobe Reader (with retry)"
@@ -132,11 +132,32 @@ Write-Host "=========================================`n"
 # -----------------------
 
 function Verify-Chrome {
-    return (Test-Path "C:\Program Files\Google\Chrome\Application\chrome.exe")
+    $chromePaths = @(
+        "C:\Program Files\Google\Chrome\Application\chrome.exe",
+        "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+    )
+
+    foreach ($path in $chromePaths) {
+        if (Test-Path $path) { return $true }
+    }
+
+    return $false
 }
 
 function Verify-Adobe {
-    return (Test-Path "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe")
+    $adobePaths = @(
+        "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
+        "C:\Program Files\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
+        "C:\Program Files (x86)\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
+        "C:\Program Files\Adobe\Acrobat\Reader\AcroRd32.exe",
+        "C:\Program Files (x86)\Adobe\Acrobat\Reader\AcroRd32.exe"
+    )
+
+    foreach ($path in $adobePaths) {
+        if (Test-Path $path) { return $true }
+    }
+
+    return $false
 }
 
 # -----------------------
@@ -156,16 +177,21 @@ function Install-WithRetry {
     while ($attempt -le $maxAttempts) {
         Write-Host "`nInstalling $DisplayName (Attempt $attempt of $maxAttempts)..."
 
-        # Install the package
-        Start-Process "choco" -ArgumentList "install $Pkg -y --force" -NoNewWindow -Wait
+        # upgrade = install if missing, upgrade if present
+        & choco upgrade $Pkg -y --force
+        $exitCode = $LASTEXITCODE
 
-        # Treat "already installed" as success
-        if (& $VerifyFunction) {
-            Write-Host "`nSUCCESS: $DisplayName installed.`n"
+        if ($exitCode -eq 0 -and (& $VerifyFunction)) {
+            Write-Host "`nSUCCESS: $DisplayName installed and verified.`n"
             return $true
         }
 
-        Write-Host "FAILED: $DisplayName verification failed."
+        if (& $VerifyFunction) {
+            Write-Host "`nSUCCESS: $DisplayName appears to already be installed / verified.`n"
+            return $true
+        }
+
+        Write-Host "FAILED: $DisplayName verification failed. Chocolatey exit code: $exitCode"
         $attempt++
         Start-Sleep -Seconds 2
     }
@@ -177,24 +203,18 @@ function Install-WithRetry {
 # -----------------------
 # Install Chrome
 # -----------------------
-choco install googlechrome -y
-
-if ($LASTEXITCODE -eq 0) {
-    $chromeOK = $true
-} else {
-    $chromeOK = $false
-}
+$chromeOK = Install-WithRetry `
+    -Pkg "googlechrome" `
+    -DisplayName "Google Chrome" `
+    -VerifyFunction { Verify-Chrome }
 
 # -----------------------
 # Install Adobe Reader
 # -----------------------
-choco install adobereader -y
-
-if ($LASTEXITCODE -eq 0) {
-    $adobeOK = $true
-} else {
-    $adobeOK = $false
-}
+$adobeOK = Install-WithRetry `
+    -Pkg "adobereader" `
+    -DisplayName "Adobe Reader" `
+    -VerifyFunction { Verify-Adobe }
 
 # -----------------------
 # Final Banner
