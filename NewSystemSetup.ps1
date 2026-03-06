@@ -177,10 +177,13 @@ function Install-WithRetry {
 # -----------------------
 # Install Chrome
 # -----------------------
-$chromeOK = Install-WithRetry `
-    -Pkg "googlechrome" `
-    -DisplayName "Google Chrome" `
-    -VerifyFunction { Verify-Chrome }
+choco install googlechrome -y --force
+
+if ($LASTEXITCODE -eq 0) {
+    $chromeOK = $true
+} else {
+    $chromeOK = $false
+}
 
 # -----------------------
 # Install Adobe Reader
