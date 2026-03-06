@@ -177,7 +177,7 @@ function Install-WithRetry {
 # -----------------------
 # Install Chrome
 # -----------------------
-choco install googlechrome -y --force
+choco install googlechrome -y
 
 if ($LASTEXITCODE -eq 0) {
     $chromeOK = $true
