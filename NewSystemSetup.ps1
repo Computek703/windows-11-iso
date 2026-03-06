@@ -188,10 +188,13 @@ if ($LASTEXITCODE -eq 0) {
 # -----------------------
 # Install Adobe Reader
 # -----------------------
-$adobeOK = Install-WithRetry `
-    -Pkg "adobereader" `
-    -DisplayName "Adobe Reader" `
-    -VerifyFunction { Verify-Adobe }
+choco install adobereader -y
+
+if ($LASTEXITCODE -eq 0) {
+    $adobeOK = $true
+} else {
+    $adobeOK = $false
+}
 
 # -----------------------
 # Final Banner
